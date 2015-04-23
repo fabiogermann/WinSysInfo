@@ -36,6 +36,10 @@ typedef enum WindowsVersion
    WindowsServer2008,
    WindowsServer2008R2,
    Windows7,
+   Windows8,
+   WindowsServer2012,
+    Windows81,
+    WindowsServer2012R2,
 };
 
 typedef enum WindowsEdition

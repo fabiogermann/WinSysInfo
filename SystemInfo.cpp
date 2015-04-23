@@ -9,8 +9,9 @@
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
 #define BUFSIZE 80
-
-#define VER_SUITE_WH_SERVER 0x8000
+#pragma comment(lib, "Advapi32.lib")
+#pragma comment(lib, "User32.lib")
+//#define VER_SUITE_WH_SERVER 0x8000
 
 typedef void (WINAPI *PGetNativeSystemInfo)(LPSYSTEM_INFO);
 
@@ -40,7 +41,7 @@ SystemInfo::SystemInfo()
    }
 
    pGNSI = (PGetNativeSystemInfo) GetProcAddress(
-      GetModuleHandle(_T("kernel32.dll")), 
+      GetModuleHandle(TEXT("kernel32.dll")),
       "GetNativeSystemInfo");
 
    if(NULL != pGNSI) pGNSI(&m_SysInfo);
@@ -176,6 +177,22 @@ void SystemInfo::DetectWindowsVersion()
                         WindowsServer2008R2;
                      }
                      break;
+
+                  case 2:
+                     {
+                        m_nWinVersion = m_osvi.wProductType == VER_NT_WORKSTATION ?
+                        Windows8 :
+                        WindowsServer2012;
+                     }
+                     break;
+
+                  case 3:
+                     {
+                        m_nWinVersion = m_osvi.wProductType == VER_NT_WORKSTATION ?
+                        Windows81 :
+                        WindowsServer2012R2;
+                     }
+                     break;
                   }
                }
                break;
@@ -188,23 +205,25 @@ void SystemInfo::DetectWindowsVersion()
    {
       HKEY hKey;
       char szProductType[BUFSIZE];
+      wchar_t* wString  =new wchar_t[BUFSIZE];
+      MultiByteToWideChar(CP_ACP, 0, szProductType, -1, wString, BUFSIZE);
       DWORD dwBufLen=BUFSIZE;
       LONG lRet;
 
       lRet = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-         "SYSTEM\\CurrentControlSet\\Control\\ProductOptions",
+         TEXT("SYSTEM\\CurrentControlSet\\Control\\ProductOptions"),
          0, KEY_QUERY_VALUE, &hKey );
       if( lRet != ERROR_SUCCESS )
          return;
 
-      lRet = RegQueryValueEx( hKey, "ProductType", NULL, NULL,
+      lRet = RegQueryValueEx( hKey, TEXT("ProductType"), NULL, NULL,
          (LPBYTE) szProductType, &dwBufLen);
       if( (lRet != ERROR_SUCCESS) || (dwBufLen > BUFSIZE) )
          return;
 
       RegCloseKey( hKey );
 
-      if ( lstrcmpi( "WINNT", szProductType) == 0 )
+      if ( lstrcmpi( TEXT("WINNT"), wString) == 0 )
       {
          if ( m_osvi.dwMajorVersion <= 4 )
          {
@@ -212,7 +231,7 @@ void SystemInfo::DetectWindowsVersion()
             m_nWinEdition = Workstation;
          }
       }
-      if ( lstrcmpi( "LANMANNT", szProductType) == 0 )
+      if ( lstrcmpi( TEXT("LANMANNT"), wString) == 0 )
       {
          if ( m_osvi.dwMajorVersion == 5 && m_osvi.dwMinorVersion == 2 )
          {
@@ -231,7 +250,7 @@ void SystemInfo::DetectWindowsVersion()
             m_nWinEdition = Server;
          }
       }
-      if ( lstrcmpi( "SERVERNT", szProductType) == 0 )
+      if ( lstrcmpi( TEXT("SERVERNT"), wString) == 0 )
       {
          if ( m_osvi.dwMajorVersion == 5 && m_osvi.dwMinorVersion == 2 )
          {
@@ -568,23 +587,25 @@ void SystemInfo::DetectWindowsEdition()
 
 void SystemInfo::DetectWindowsServicePack()
 {
+    char    *pmbbuf   = (char *)malloc( 128 );
+    int i = wcstombs( pmbbuf, m_szServicePack, 128 );
    // Display service pack (if any) and build number.
 
    if( m_osvi.dwMajorVersion == 4 && 
-      lstrcmpi( m_osvi.szCSDVersion, "Service Pack 6" ) == 0 )
+      lstrcmpi( m_osvi.szCSDVersion, TEXT("Service Pack 6") ) == 0 )
    {
       HKEY hKey;
       LONG lRet;
 
       // Test for SP6 versus SP6a.
       lRet = RegOpenKeyEx( HKEY_LOCAL_MACHINE,
-         "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Hotfix\\Q246009",
+         TEXT("SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Hotfix\\Q246009"),
          0, KEY_QUERY_VALUE, &hKey );
       if( lRet == ERROR_SUCCESS )
-         sprintf(m_szServicePack, "Service Pack 6a (Build %d)\n", m_osvi.dwBuildNumber & 0xFFFF );         
+         sprintf(pmbbuf, "Service Pack 6a (Build %d)\n", m_osvi.dwBuildNumber & 0xFFFF );
       else // Windows NT 4.0 prior to SP6a
       {
-         sprintf(m_szServicePack, "%s (Build %d)\n",
+         sprintf(pmbbuf, "%s (Build %d)\n",
             m_osvi.szCSDVersion,
             m_osvi.dwBuildNumber & 0xFFFF);
       }
@@ -593,7 +614,7 @@ void SystemInfo::DetectWindowsServicePack()
    }
    else // Windows NT 3.51 and earlier or Windows 2000 and later
    {
-      sprintf(m_szServicePack, "%s (Build %d)\n",
+      sprintf(pmbbuf, "%s (Build %d)\n",
          m_osvi.szCSDVersion,
          m_osvi.dwBuildNumber & 0xFFFF);
    }
@@ -607,7 +628,7 @@ DWORD SystemInfo::DetectProductInfo()
 	if(m_osvi.dwMajorVersion >= 6)
 	{
 		PGetProductInfo lpProducInfo = (PGetProductInfo)GetProcAddress(
-			GetModuleHandle(_T("kernel32.dll")), "GetProductInfo");
+            GetModuleHandle(TEXT("kernel32.dll")), "GetProductInfo");
 
 		if(NULL != lpProducInfo)
 		{
@@ -672,8 +693,11 @@ DWORD SystemInfo::GetPlatformID() const
 void SystemInfo::GetServicePackInfo(TCHAR* szServicePack) const
 {
 	if(szServicePack == NULL) return;
-	
-	_tcscpy(szServicePack, m_szServicePack);
+    char    *pmbbuf   = (char *)malloc( 128 );
+    int i = wcstombs( pmbbuf, szServicePack, 128 );
+    char *szTo = new char[128];
+    WideCharToMultiByte(CP_ACP, 0, m_szServicePack, -1, szTo, 128, NULL, NULL);
+    _tcscpy(pmbbuf, szTo);
 }
 
 bool SystemInfo::Is32bitPlatform() const
